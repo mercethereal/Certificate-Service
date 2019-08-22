@@ -1,4 +1,4 @@
-#Certificate Service
+# Certificate Service
 
 This package was created in response to a programming challenge.
 
@@ -17,7 +17,8 @@ The code is only stub code for now. The 'certificate' is only a key value pair s
 redis cache containing the domain name and expiration date. 
 
 
-##Testing the package
+## Testing the package
+
 The certificate_test.go runs a simulation of a generic certificate server. To run it:
 
 1. Download the source code to your golang path src directory.
