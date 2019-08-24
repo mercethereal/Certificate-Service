@@ -17,8 +17,8 @@ package CertificateService
 import (
 	"encoding/binary"
 	"fmt"
-	"regexp"
 
+	"regexp"
 	//imported pagckage, run go get github.com/gomodule/redigo/redis
 	"github.com/gomodule/redigo/redis"
 	"io"
@@ -46,7 +46,15 @@ https://www.alexedwards.net/blog/organising-database-access
 
 */
 
-var pool = newPool()
+type dbConn struct {
+	myPool *redis.Pool
+}
+
+func NewDbConn() dbConn {
+	temp := new(dbConn)
+	temp.myPool = newPool()
+	return *temp
+}
 
 /*
 newPool closely follows the recommended initiation of the  connection pool in the redis.Pool documentation.
@@ -58,7 +66,7 @@ func newPool() *redis.Pool {
 		MaxActive: 12000, // max number of connections
 		Dial: func() (redis.Conn, error) {
 			// by default, redis starts on port 6379. If you have it started on a diff
-			c, err := redis.Dial("tcp", "localhost:6379")
+			c, err := redis.Dial("tcp", "192.168.99.100:6379")
 			if err != nil {
 				fmt.Println(err.Error())
 			}
@@ -67,23 +75,10 @@ func newPool() *redis.Pool {
 	}
 }
 
-// certserver creates a root certificate for the certificate service itself
-
-var certServer = wrapCertServer()
-
-/*
-	This function just wraps a call to newCertServer.
- 	Needed handle the time.Afterfunc line which requires a func() with no return value
-*/
-func wrapCertServer() bool {
-	newCertServer()
-	return true
-}
-
 //Make sure the http servers certificate has been created and is up to date
-func newCertServer() {
+func (db *dbConn) newCertServer() {
 	//this next line creates OR renews a certificate
-	_, err := createCert("CERTSERVER.FAN")
+	_, err := createCert("CERTSERVER.FAN", db)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -91,9 +86,7 @@ func newCertServer() {
 		Each certificate is created with a 10 minute expiration date. Make sure
 		the server is renewed ever 9 minutes
 	*/
-	time.AfterFunc(time.Minute*9, newCertServer)
-
-	return
+	time.AfterFunc(time.Minute*9, db.newCertServer)
 }
 
 /*
@@ -102,11 +95,10 @@ OpenHTTPServer provides:
 An http server.
 An http handler for routing http requests.
 */
-func OpenHTTPServer() {
-
-	http.HandleFunc("/", httpHandler)
+func (db *dbConn) OpenHTTPServer() {
+	db.newCertServer()
+	http.HandleFunc("/", db.httpHandler)
 	log.Fatal(http.ListenAndServe(":8080", nil))
-
 }
 
 /*
@@ -114,12 +106,12 @@ createCert serves two purposes:
 1: to create a cert if it doesn't exist
 2: renew a cert if it exists, but has expired
 */
-func createCert(domainName string) (string, error) {
+func createCert(domainName string, db *dbConn) (string, error) {
 	/*
 		Use a pooled connection to redis and close the
 		connection when the function exits.
 	*/
-	conn := pool.Get()
+	conn := db.myPool.Get()
 	defer conn.Close()
 
 	// set or renew the expiration date/time for the cert
@@ -148,13 +140,13 @@ A good use for this is, say a client web browser trying to validate a domain cer
 to establish a trusted connection.
 */
 
-func getCert(domainName string) (time.Time, error) {
+func getCert(domainName string, db *dbConn) (time.Time, error) {
 
 	/*
 		Use a pooled connection to redis and close the
 		connection when the function exits.
 	*/
-	conn := pool.Get()
+	conn := db.myPool.Get()
 	defer conn.Close()
 
 	//retrieve the expiration and any errors
@@ -175,7 +167,7 @@ func getCert(domainName string) (time.Time, error) {
 should be able to handle all scenarios and edge cases.........
 */
 
-func httpHandler(w http.ResponseWriter, r *http.Request) {
+func (db *dbConn) httpHandler(w http.ResponseWriter, r *http.Request) {
 
 	// force the request URI to uppercase for easy comparison tests
 	temp := strings.ToUpper(r.RequestURI)
@@ -185,7 +177,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 		//trim the /CERT/ OR /CERTCREATE/ prefix from the decision tree below
 		DomainName := strings.TrimPrefix(full, prefix)
 		// writes the final response string after a request to create or retrieve a domain
-		io.WriteString(w, "<h1>"+redisResponse(DomainName, getorset)+"</h1>")
+		io.WriteString(w, "<h1>"+redisResponse(DomainName, getorset, db)+"</h1>")
 	}
 
 	//decision tree routing
@@ -202,7 +194,7 @@ func httpHandler(w http.ResponseWriter, r *http.Request) {
 Similar to and working in conjunction with the decision tree from httpHandler above.
 this function sends and receives responses from the redis cache.
 */
-func redisResponse(domainName string, createOrRetrieve string) string {
+func redisResponse(domainName string, createOrRetrieve string, db *dbConn) string {
 	/*
 		Valid domains include any alphanumeric combination of 1-62 character, followed
 		by a '.' and finally by another alphanumeric combination of 2-62 characters.
@@ -217,9 +209,9 @@ func redisResponse(domainName string, createOrRetrieve string) string {
 	}
 
 	if createOrRetrieve == "RETRIEVE" {
-		return retrieve(domainName)
+		return retrieve(domainName, db)
 	} else { // CREATE is selected, create the domain
-		return create(domainName)
+		return create(domainName, db)
 	}
 
 }
@@ -227,9 +219,9 @@ func redisResponse(domainName string, createOrRetrieve string) string {
 /*
 'retrieve' is part of the redisResponse decision tree above
 */
-func retrieve(domainName string) string {
+func retrieve(domainName string, db *dbConn) string {
 	//attempt to retrieve the domainName query from the redis cache
-	expire, err := getCert(domainName)
+	expire, err := getCert(domainName, db)
 	if err != nil {
 		//domain doesn't exist in redis cach
 		if strings.ToUpper(err.Error()) == "REDIGO: NIL RETURNED" {
@@ -248,9 +240,9 @@ func retrieve(domainName string) string {
 /*
 'retrieve' is part of the redisResponse decision tree above
 */
-func create(domainName string) string {
+func create(domainName string, db *dbConn) string {
 	// issue a create request to the redis cache
-	resp, err := createCert(domainName)
+	resp, err := createCert(domainName, db)
 	// required delay set out by the specification
 	time.Sleep(time.Second * 10)
 	if err != nil {
@@ -263,12 +255,12 @@ func create(domainName string) string {
 /*
  Public access method to see if Redis is alive
 */
-func PingRedis() bool {
+func PingRedis(db *dbConn) bool {
 	/*
 		Use a pooled connection to redis and close the
 		connection when the function exits.
 	*/
-	conn := pool.Get()
+	conn := db.myPool.Get()
 	defer conn.Close()
 
 	/*
@@ -302,9 +294,9 @@ func decode(b []byte) time.Time {
 GetAll retrieves all of the domains stored in the redis database. This is just provided for
 convenience of testing.
 */
-func GetAll() []string {
+func (db *dbConn) GetAll() []string {
 
-	conn := pool.Get()
+	conn := db.myPool.Get()
 	defer conn.Close()
 
 	data, err := redis.ByteSlices(conn.Do("HGETALL", "Domain"))
@@ -313,6 +305,10 @@ func GetAll() []string {
 		log.Fatalf("error: %v", err)
 	}
 	var c = make([]string, len(data))
+	/* Each value of x contains a 1value for the domain name and 1 for the expiration date
+	   I'm only seeking to return the Domain names. The Domain names are all the even valued
+	   number, hence the i mod 2 expression here.
+	*/
 	for i, v := range data {
 		if i%2 == 0 {
 			c[i] = string(v)
