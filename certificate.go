@@ -72,7 +72,7 @@ func newPool() *redis.Pool {
 		MaxActive: 12000, // max number of connections
 		Dial: func() (redis.Conn, error) {
 			// by default, redis starts on port 6379. If you have it started on a diff 192.168.99.100
-			c, err := redis.Dial("tcp", "192.168.99.100:6379")
+			c, err := redis.Dial("tcp", "localhost:6379")
 			if err != nil {
 				fmt.Println(err.Error())
 			}
@@ -245,7 +245,7 @@ func (db *dbConn) retrieve(domainName string) string {
 }
 
 /*
-'retrieve' is part of the redisResponse decision tree above
+'create' is part of the redisResponse decision tree above
 */
 func (db *dbConn) create(domainName string) string {
 	// issue a create request to the redis cache

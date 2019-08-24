@@ -1,6 +1,6 @@
 /*
 This is the test package for CertificateService. You can run it by issuing the command
-go test -v CertificateService
+`go test -v -timeout 15m CertificateService`
 
 Before running the test, you may need to run
 go get github.com/Pallinder/go-randomdata
@@ -13,6 +13,8 @@ package CertificateService
 
 import (
 	"fmt"
+	"log"
+
 	//go get github.com/Pallinder/go-randomdata
 	"github.com/Pallinder/go-randomdata"
 	"io/ioutil"
@@ -88,7 +90,7 @@ wait only 10 seconds ( or slightly more.
 func testCreateCerts(db CertificateService) {
 	//create 100 domain name
 
-	fmt.Println("Simultaneous creation of 10 domains. Should take 10 seconds due to the delay requirements in the specification.")
+	fmt.Print("Simultaneous creation of 10 domains. Should take 10 seconds due to the delay requirements in the specification.\n\n")
 	var wg = sync.WaitGroup{}
 	for i := 0; i < 9; i++ {
 		//need a seperate wait group for each iteration
@@ -96,11 +98,14 @@ func testCreateCerts(db CertificateService) {
 		//simultaneous creation of domains
 		go func() {
 			defer wg.Done()
-			resp, _ := http.Get("http://localhost:8080/certcreate/" + randomdata.SillyName() + randExt())
-			defer resp.Body.Close()
-			body, _ := ioutil.ReadAll(resp.Body)
-			str2 := string(body[:])
-			fmt.Println(str2)
+			_, err := http.Get("http://localhost:8080/certcreate/" + randomdata.SillyName() + randExt())
+			if err != nil {
+				log.Fatalf(err.Error())
+			}
+			//defer resp.Body.Close()
+			//body, _ := ioutil.ReadAll(resp.Body)
+			//str2 := string(body[:])
+			//fmt.Println(str2)
 		}()
 	}
 	//wait for all go routines to return, otherwise, the system will panic
@@ -112,7 +117,7 @@ func testCreateCerts(db CertificateService) {
 // TestDomain; the fmt.PrintLn messages below provide good documentation for this function
 func testDomains(db CertificateService) {
 	fmt.Println("Testing each cert that we created through an http connection.")
-	fmt.Println("localhost:80808/cert/{Domain}. CERTSERVER.FAN will be created seperatel by certificate service for its own use.")
+	fmt.Print("localhost:80808/cert/{Domain}. CERTSERVER.FAN will be created seperatel by certificate service for its own use.\n\n")
 	x := db.GetAll()
 	//retrieve all the domains in the redis cache
 	for i, v := range x {
