@@ -4,14 +4,12 @@ This package was created in response to a programming challenge.
 
 Package CertificateService provides functions to:
 
-Start an http server on the localhost port 8080.
-
-Create and maintain a pooled connection to a redis server.
-Ping the redis server to see if its alive.
-
-Create domain certificates with a 10 minute expiration date.
-Retrieve a domain for validation purposes,
-Provide an http handler to receive and process these 'Create' and 'Retrieve' requests
+--Start an http server on the localhost port 8080.
+--Create and maintain a pooled connection to a redis server.
+--Ping the redis server to see if its alive.
+--Create domain certificates with a 10 minute expiration date.
+--Retrieve a domain for validation purposes,
+--Provide an http handler to receive and process these 'Create' and 'Retrieve' requests
 
 The code is only stub code for now. The 'certificate' is only a key value pair stored in a 
 redis cache containing the domain name and expiration date. 
