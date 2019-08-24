@@ -55,8 +55,7 @@ docker run --name some-redis -d -p 6379:6379 redis redis-server --appendonly yes
 */
 func TestServer(t *testing.T) {
 
-	db := NewDbConn()
-
+	db := NewCertificateService()
 	go db.OpenHTTPServer()
 	resp, err := http.Get("http://localhost:8080")
 	if err != nil {
@@ -66,12 +65,12 @@ func TestServer(t *testing.T) {
 	body, _ := ioutil.ReadAll(resp.Body)
 	t.Logf(string(body[:]))
 
-	redisOK := PingRedis(&db)
+	redisOK := db.PingRedis()
 	if !redisOK {
 		t.Fatalf("Redis could not be pinged. Please start Redis befor running these tests")
 	}
 
-	testCreateCerts(&db)
+	testCreateCerts(db)
 }
 
 /*
@@ -86,7 +85,7 @@ wait 33 minutes before they could validate their connection. This way, each and 
 wait only 10 seconds ( or slightly more.
 
 */
-func testCreateCerts(db *dbConn) {
+func testCreateCerts(db CertificateService) {
 	//create 100 domain name
 
 	fmt.Println("Simultaneous creation of 10 domains. Should take 10 seconds due to the delay requirements in the specification.")
@@ -111,12 +110,11 @@ func testCreateCerts(db *dbConn) {
 }
 
 // TestDomain; the fmt.PrintLn messages below provide good documentation for this function
-func testDomains(db *dbConn) {
+func testDomains(db CertificateService) {
 	fmt.Println("Testing each cert that we created through an http connection.")
 	fmt.Println("localhost:80808/cert/{Domain}. CERTSERVER.FAN will be created seperatel by certificate service for its own use.")
-
-	//retrieve all the domains in the redis cache
 	x := db.GetAll()
+	//retrieve all the domains in the redis cache
 	for i, v := range x {
 		/* Each value of x contains a 1value for the domain name and 1 for the expiration date
 		   I'm only seeking to return the Domain names. The Domain names are all the even valued
@@ -153,7 +151,7 @@ func testDomains(db *dbConn) {
 
 }
 
-func testFinal(db *dbConn) {
+func testFinal(db CertificateService) {
 	fmt.Print("\n\n")
 	fmt.Println("Testing if the domains expired, and the server certificate renewed")
 	//retrieve all the domains in the redis cache

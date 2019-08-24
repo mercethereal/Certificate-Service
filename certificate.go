@@ -29,9 +29,32 @@ import (
 )
 
 /*
-The 'pool' and 'newpool' function are used to maintain a system of connections to a redis server.
+The 'CertificateService' interface is being used to encapsulate
+all of this packages functions and the redis database connection.
+*/
 
-'pool' and 'newpool' uses the imported redigo package to talk to the redis database. Make sure
+type CertificateService interface {
+	OpenHTTPServer()
+	PingRedis() bool
+	GetAll() []string
+}
+
+//Holds a pointer to the redis database cache
+type dbConn struct {
+	myPool *redis.Pool
+}
+
+// Instantiate the redis database and return the interface.
+func NewCertificateService() CertificateService {
+	temp := new(dbConn)
+	temp.myPool = newPool()
+	return temp
+}
+
+/*
+The newPool' function is used to maintain a system of connections to a redis server.
+
+'newPool' uses the imported redigo package to talk to the redis database. Make sure
 this package is imported before using.
 
 Redis must be started before using any functions in this package. If you have docker, redis is simple
@@ -41,32 +64,15 @@ docker run --name some-redis -d -p 6379:6379 redis redis-server --appendonly yes
 
 This docker command will ensure that redis start on port 6379 (-p 6379:6379) and will persisit data between sessions.
 
-For future versions, a better strategy for maintaining database connections should be considered
-https://www.alexedwards.net/blog/organising-database-access
-
 */
 
-type dbConn struct {
-	myPool *redis.Pool
-}
-
-func NewDbConn() dbConn {
-	temp := new(dbConn)
-	temp.myPool = newPool()
-	return *temp
-}
-
-/*
-newPool closely follows the recommended initiation of the  connection pool in the redis.Pool documentation.
-For more information, view the redigo redis.Pool documentation on the imported package
-*/
 func newPool() *redis.Pool {
 	return &redis.Pool{
 		MaxIdle:   80,
 		MaxActive: 12000, // max number of connections
 		Dial: func() (redis.Conn, error) {
-			// by default, redis starts on port 6379. If you have it started on a diff
-			c, err := redis.Dial("tcp", "localhost:6379")
+			// by default, redis starts on port 6379. If you have it started on a diff 192.168.99.100
+			c, err := redis.Dial("tcp", "192.168.99.100:6379")
 			if err != nil {
 				fmt.Println(err.Error())
 			}
@@ -78,7 +84,7 @@ func newPool() *redis.Pool {
 //Make sure the http servers certificate has been created and is up to date
 func (db *dbConn) newCertServer() {
 	//this next line creates OR renews a certificate
-	_, err := createCert("CERTSERVER.FAN", db)
+	_, err := db.createCert("CERTSERVER.FAN")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -94,6 +100,7 @@ OpenHTTPServer provides:
 
 An http server.
 An http handler for routing http requests.
+
 */
 func (db *dbConn) OpenHTTPServer() {
 	db.newCertServer()
@@ -106,7 +113,7 @@ createCert serves two purposes:
 1: to create a cert if it doesn't exist
 2: renew a cert if it exists, but has expired
 */
-func createCert(domainName string, db *dbConn) (string, error) {
+func (db *dbConn) createCert(domainName string) (string, error) {
 	/*
 		Use a pooled connection to redis and close the
 		connection when the function exits.
@@ -140,7 +147,7 @@ A good use for this is, say a client web browser trying to validate a domain cer
 to establish a trusted connection.
 */
 
-func getCert(domainName string, db *dbConn) (time.Time, error) {
+func (db *dbConn) getCert(domainName string) (time.Time, error) {
 
 	/*
 		Use a pooled connection to redis and close the
@@ -177,7 +184,7 @@ func (db *dbConn) httpHandler(w http.ResponseWriter, r *http.Request) {
 		//trim the /CERT/ OR /CERTCREATE/ prefix from the decision tree below
 		DomainName := strings.TrimPrefix(full, prefix)
 		// writes the final response string after a request to create or retrieve a domain
-		io.WriteString(w, "<h1>"+redisResponse(DomainName, getorset, db)+"</h1>")
+		io.WriteString(w, "<h1>"+db.redisResponse(DomainName, getorset)+"</h1>")
 	}
 
 	//decision tree routing
@@ -194,7 +201,7 @@ func (db *dbConn) httpHandler(w http.ResponseWriter, r *http.Request) {
 Similar to and working in conjunction with the decision tree from httpHandler above.
 this function sends and receives responses from the redis cache.
 */
-func redisResponse(domainName string, createOrRetrieve string, db *dbConn) string {
+func (db *dbConn) redisResponse(domainName string, createOrRetrieve string) string {
 	/*
 		Valid domains include any alphanumeric combination of 1-62 character, followed
 		by a '.' and finally by another alphanumeric combination of 2-62 characters.
@@ -209,9 +216,9 @@ func redisResponse(domainName string, createOrRetrieve string, db *dbConn) strin
 	}
 
 	if createOrRetrieve == "RETRIEVE" {
-		return retrieve(domainName, db)
+		return db.retrieve(domainName)
 	} else { // CREATE is selected, create the domain
-		return create(domainName, db)
+		return db.create(domainName)
 	}
 
 }
@@ -219,9 +226,9 @@ func redisResponse(domainName string, createOrRetrieve string, db *dbConn) strin
 /*
 'retrieve' is part of the redisResponse decision tree above
 */
-func retrieve(domainName string, db *dbConn) string {
+func (db *dbConn) retrieve(domainName string) string {
 	//attempt to retrieve the domainName query from the redis cache
-	expire, err := getCert(domainName, db)
+	expire, err := db.getCert(domainName)
 	if err != nil {
 		//domain doesn't exist in redis cach
 		if strings.ToUpper(err.Error()) == "REDIGO: NIL RETURNED" {
@@ -240,9 +247,9 @@ func retrieve(domainName string, db *dbConn) string {
 /*
 'retrieve' is part of the redisResponse decision tree above
 */
-func create(domainName string, db *dbConn) string {
+func (db *dbConn) create(domainName string) string {
 	// issue a create request to the redis cache
-	resp, err := createCert(domainName, db)
+	resp, err := db.createCert(domainName)
 	// required delay set out by the specification
 	time.Sleep(time.Second * 10)
 	if err != nil {
@@ -255,7 +262,7 @@ func create(domainName string, db *dbConn) string {
 /*
  Public access method to see if Redis is alive
 */
-func PingRedis(db *dbConn) bool {
+func (db *dbConn) PingRedis() bool {
 	/*
 		Use a pooled connection to redis and close the
 		connection when the function exits.
