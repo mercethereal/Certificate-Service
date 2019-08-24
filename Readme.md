@@ -40,7 +40,7 @@ The certificate_test.go runs a simulation of a generic certificate server. To ru
     
    ` docker run --name some-redis -d -p 6379:6379 redis redis-server --appendonly yes`
 
-5. Finally, test the package, The emulation lasts a little over 11 minutes to.
+5. Finally, test the package, The emulation lasts a little over 11 minutes.
 Read the instructions as the test runs
 
     `go test -v -timeout 15m CertificateService`
