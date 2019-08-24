@@ -117,7 +117,7 @@ func testCreateCerts(db CertificateService) {
 // TestDomain; the fmt.PrintLn messages below provide good documentation for this function
 func testDomains(db CertificateService) {
 	fmt.Println("Testing each cert that we created through an http connection.")
-	fmt.Print("localhost:80808/cert/{Domain}. CERTSERVER.FAN will be created seperatel by certificate service for its own use.\n\n")
+	fmt.Print("localhost:80808/cert/{Domain}. CERTSERVER.FAN will be created separately by certificate service for its own use.\n\n")
 	x := db.GetAll()
 	//retrieve all the domains in the redis cache
 	for i, v := range x {
