@@ -36,7 +36,7 @@ The certificate_test.go runs a simulation of a generic certificate server. To ru
 
     `go get github.com/Pallinder/go-randomdata`
 
-4. Start redis. If you have docker installed, this is easy
+4. Start redis. If you have docker installed, this is easy.
     
    ` docker run --name some-redis -d -p 6379:6379 redis redis-server --appendonly yes`
 
