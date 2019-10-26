@@ -8,7 +8,7 @@ Package CertificateService provides functions to:
 
 --Create and maintain a pooled connection to a redis server.
 
---Ping the redis server to see if its alive.
+--Ping the redis server to see if it's alive.
 
 --Create domain certificates with a 10 minute expiration date.
 
